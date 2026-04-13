@@ -48,7 +48,9 @@ import {
   EntityHeader,
   LifecycleStage,
   LifecycleState,
+  BomDrawer,
 } from "@/components/erp"
+import type { BomItem as BomItemType } from "@/components/erp"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -75,15 +77,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet"
+
 import { useNavigationStore } from "@/lib/stores/navigation-store"
 import { cn } from "@/lib/utils"
 
@@ -219,36 +213,6 @@ interface BOMItem {
   sku?: string
   vendor?: string
 }
-
-// Catalog Item Type
-interface CatalogItem {
-  id: string
-  name: string
-  sku: string
-  category: string
-  unitCost: number
-  vendor: string
-  availability: "in-stock" | "low-stock" | "out-of-stock"
-}
-
-// Mock catalog/inventory data
-const catalogItems: CatalogItem[] = [
-  { id: "CAT-001", name: "Hikvision DS-2CD2386G2-IU 4K Camera", sku: "HIK-2386-4K", category: "Cameras", unitCost: 450, vendor: "Hikvision", availability: "in-stock" },
-  { id: "CAT-002", name: "Hikvision DS-2CD2183G2-I 8MP Dome", sku: "HIK-2183-8M", category: "Cameras", unitCost: 380, vendor: "Hikvision", availability: "in-stock" },
-  { id: "CAT-003", name: "Axis P3245-V 2MP PTZ Camera", sku: "AXIS-P3245", category: "Cameras", unitCost: 890, vendor: "Axis", availability: "low-stock" },
-  { id: "CAT-004", name: "HikCentral Professional NVR 64ch", sku: "HIK-NVR-64", category: "Recording", unitCost: 3500, vendor: "Hikvision", availability: "in-stock" },
-  { id: "CAT-005", name: "HikCentral Professional NVR 32ch", sku: "HIK-NVR-32", category: "Recording", unitCost: 2200, vendor: "Hikvision", availability: "in-stock" },
-  { id: "CAT-006", name: "ZKTeco SpeedFace-V5L Biometric Reader", sku: "ZKT-V5L", category: "Access Control", unitCost: 650, vendor: "ZKTeco", availability: "in-stock" },
-  { id: "CAT-007", name: "ZKTeco ProFace X Biometric Terminal", sku: "ZKT-PFX", category: "Access Control", unitCost: 850, vendor: "ZKTeco", availability: "low-stock" },
-  { id: "CAT-008", name: "Honeywell Galaxy Integration Module", sku: "HON-GAL-INT", category: "Integration", unitCost: 2200, vendor: "Honeywell", availability: "in-stock" },
-  { id: "CAT-009", name: "CAT6A Cabling (per 1000ft)", sku: "CAB-6A-1K", category: "Infrastructure", unitCost: 280, vendor: "Belden", availability: "in-stock" },
-  { id: "CAT-010", name: "Network Switch 48-Port PoE+", sku: "NET-48P-POE", category: "Networking", unitCost: 1200, vendor: "Cisco", availability: "in-stock" },
-  { id: "CAT-011", name: "Network Switch 24-Port PoE+", sku: "NET-24P-POE", category: "Networking", unitCost: 750, vendor: "Cisco", availability: "in-stock" },
-  { id: "CAT-012", name: "UPS Battery Backup 3000VA", sku: "UPS-3000", category: "Power", unitCost: 850, vendor: "APC", availability: "in-stock" },
-  { id: "CAT-013", name: "UPS Battery Backup 1500VA", sku: "UPS-1500", category: "Power", unitCost: 450, vendor: "APC", availability: "in-stock" },
-  { id: "CAT-014", name: "Mounting Hardware Kit", sku: "MNT-KIT-01", category: "Installation", unitCost: 25, vendor: "Generic", availability: "in-stock" },
-  { id: "CAT-015", name: "Junction Box Weatherproof", sku: "JB-WP-01", category: "Installation", unitCost: 18, vendor: "Generic", availability: "in-stock" },
-]
 
 // Entity/Lifecycle data
 const entityData = {
@@ -415,17 +379,6 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
   
   // Add Item drawer state
   const [addItemDrawerOpen, setAddItemDrawerOpen] = useState(false)
-  const [catalogSearchQuery, setCatalogSearchQuery] = useState("")
-  const [selectedCatalogItems, setSelectedCatalogItems] = useState<Set<string>>(new Set())
-  const [showCustomForm, setShowCustomForm] = useState(false)
-  const [customItem, setCustomItem] = useState({
-    name: "",
-    category: "",
-    unitCost: "",
-    sku: "",
-    vendor: "",
-    description: "",
-  })
   
   // BOM state (for managing items locally)
   const [bomItems, setBomItems] = useState(proposal.billOfMaterials)
@@ -488,65 +441,6 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
   
   const isLocked = !isNewProposal && (proposal.status === "submitted" || proposal.status === "approved")
   
-  // Filter catalog items based on search
-  const filteredCatalogItems = useMemo(() => {
-    if (!catalogSearchQuery.trim()) return catalogItems
-    const query = catalogSearchQuery.toLowerCase()
-    return catalogItems.filter(
-      (item) =>
-        item.name.toLowerCase().includes(query) ||
-        item.sku.toLowerCase().includes(query) ||
-        item.category.toLowerCase().includes(query) ||
-        item.vendor.toLowerCase().includes(query)
-    )
-  }, [catalogSearchQuery])
-  
-  // Handle adding selected catalog items to BOM
-  const handleAddSelectedItems = () => {
-    const newItems: BOMItem[] = []
-    selectedCatalogItems.forEach((id) => {
-      const catalogItem = catalogItems.find((item) => item.id === id)
-      if (catalogItem) {
-        newItems.push({
-          id: Date.now() + Math.random(),
-          item: catalogItem.name,
-          category: catalogItem.category,
-          quantity: 1,
-          unitCost: catalogItem.unitCost,
-          total: catalogItem.unitCost,
-          source: "catalog",
-          sku: catalogItem.sku,
-          vendor: catalogItem.vendor,
-        })
-      }
-    })
-    setBomItems([...bomItems, ...newItems])
-    setSelectedCatalogItems(new Set())
-    setAddItemDrawerOpen(false)
-  }
-  
-  // Handle adding custom item to BOM
-  const handleAddCustomItem = () => {
-    if (!customItem.name || !customItem.category || !customItem.unitCost) return
-    
-    const unitCost = parseFloat(customItem.unitCost) || 0
-    const newItem: BOMItem = {
-      id: Date.now(),
-      item: customItem.name,
-      category: customItem.category,
-      quantity: 1,
-      unitCost,
-      total: unitCost,
-      source: "custom",
-      sku: customItem.sku || undefined,
-      vendor: customItem.vendor || undefined,
-    }
-    setBomItems([...bomItems, newItem])
-    setCustomItem({ name: "", category: "", unitCost: "", sku: "", vendor: "", description: "" })
-    setShowCustomForm(false)
-    setAddItemDrawerOpen(false)
-  }
-  
   // Handle BOM item quantity change
   const handleBomQuantityChange = (itemId: number, newQty: number) => {
     setBomItems(
@@ -582,16 +476,7 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
     }
   }
   
-  // Toggle catalog item selection
-  const toggleCatalogItemSelection = (id: string) => {
-    const newSelection = new Set(selectedCatalogItems)
-    if (newSelection.has(id)) {
-      newSelection.delete(id)
-    } else {
-      newSelection.add(id)
-    }
-    setSelectedCatalogItems(newSelection)
-  }
+
   
   // Calculate material cost from local BOM state
   const materialCostFromBom = useMemo(() => {
@@ -1346,257 +1231,19 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
       </div>
       
       {/* Add Items to BOM Drawer */}
-      <Sheet open={addItemDrawerOpen} onOpenChange={setAddItemDrawerOpen}>
-        <SheetContent side="right" className="w-[480px] sm:max-w-[480px] flex flex-col">
-          <SheetHeader className="pb-4 border-b border-border">
-            <SheetTitle>Add Items to BOM</SheetTitle>
-            <SheetDescription>
-              Search existing products or create a custom item
-            </SheetDescription>
-          </SheetHeader>
-          
-          <div className="flex-1 overflow-y-auto py-4">
-            {!showCustomForm ? (
-              <>
-                {/* Search Input */}
-                <div className="relative mb-4">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by item name, SKU, category, or vendor..."
-                    value={catalogSearchQuery}
-                    onChange={(e) => setCatalogSearchQuery(e.target.value)}
-                    className="pl-9 h-9"
-                  />
-                </div>
-                
-                {/* Catalog Results */}
-                <div className="space-y-1">
-                  {filteredCatalogItems.length === 0 ? (
-                    <div className="py-8 text-center">
-                      <Package className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
-                      <p className="text-sm text-muted-foreground mb-2">No matching item found</p>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setShowCustomForm(true)}
-                      >
-                        <Plus className="h-3.5 w-3.5 mr-1.5" />
-                        Create Custom Item
-                      </Button>
-                    </div>
-                  ) : (
-                    filteredCatalogItems.map((item) => (
-                      <div 
-                        key={item.id}
-                        className={cn(
-                          "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                          selectedCatalogItems.has(item.id) 
-                            ? "border-primary bg-primary/5" 
-                            : "border-border hover:bg-accent/50"
-                        )}
-                        onClick={() => toggleCatalogItemSelection(item.id)}
-                      >
-                        <Checkbox
-                          checked={selectedCatalogItems.has(item.id)}
-                          onCheckedChange={() => toggleCatalogItemSelection(item.id)}
-                          className="mt-0.5"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <span className="text-sm font-medium block">{item.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {item.sku} • {item.category}
-                              </span>
-                            </div>
-                            <span className="text-sm font-semibold shrink-0">
-                              {formatCurrency(item.unitCost)}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <span className="text-[10px] text-muted-foreground">{item.vendor}</span>
-                            <span className={cn(
-                              "text-[10px] px-1.5 py-0.5 rounded",
-                              item.availability === "in-stock" 
-                                ? "bg-success/15 text-success" 
-                                : item.availability === "low-stock"
-                                ? "bg-warning/15 text-warning"
-                                : "bg-destructive/15 text-destructive"
-                            )}>
-                              {item.availability === "in-stock" ? "In Stock" : 
-                               item.availability === "low-stock" ? "Low Stock" : "Out of Stock"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-                
-                {/* Create Custom Item Link */}
-                {filteredCatalogItems.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-border">
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      className="w-full justify-center text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowCustomForm(true)}
-                    >
-                      <PenLine className="h-3.5 w-3.5 mr-1.5" />
-                      Create Custom Item Instead
-                    </Button>
-                  </div>
-                )}
-              </>
-            ) : (
-              /* Custom Item Form */
-              <div className="space-y-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Create Custom Item</span>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={() => setShowCustomForm(false)}
-                  >
-                    <X className="h-3.5 w-3.5 mr-1" />
-                    Back to Search
-                  </Button>
-                </div>
-                
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                      Item Name <span className="text-destructive">*</span>
-                    </label>
-                    <Input
-                      placeholder="Enter item name"
-                      value={customItem.name}
-                      onChange={(e) => setCustomItem({ ...customItem, name: e.target.value })}
-                      className="h-9"
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                        Category <span className="text-destructive">*</span>
-                      </label>
-                      <Select 
-                        value={customItem.category} 
-                        onValueChange={(v) => setCustomItem({ ...customItem, category: v })}
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Cameras">Cameras</SelectItem>
-                          <SelectItem value="Recording">Recording</SelectItem>
-                          <SelectItem value="Access Control">Access Control</SelectItem>
-                          <SelectItem value="Integration">Integration</SelectItem>
-                          <SelectItem value="Infrastructure">Infrastructure</SelectItem>
-                          <SelectItem value="Networking">Networking</SelectItem>
-                          <SelectItem value="Power">Power</SelectItem>
-                          <SelectItem value="Installation">Installation</SelectItem>
-                          <SelectItem value="Misc">Misc</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                        Unit Cost <span className="text-destructive">*</span>
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                        <Input
-                          type="number"
-                          placeholder="0.00"
-                          value={customItem.unitCost}
-                          onChange={(e) => setCustomItem({ ...customItem, unitCost: e.target.value })}
-                          className="h-9 pl-7"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                        SKU (optional)
-                      </label>
-                      <Input
-                        placeholder="e.g. CUSTOM-001"
-                        value={customItem.sku}
-                        onChange={(e) => setCustomItem({ ...customItem, sku: e.target.value })}
-                        className="h-9"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                        Vendor (optional)
-                      </label>
-                      <Input
-                        placeholder="Vendor name"
-                        value={customItem.vendor}
-                        onChange={(e) => setCustomItem({ ...customItem, vendor: e.target.value })}
-                        className="h-9"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                      Description (optional)
-                    </label>
-                    <Textarea
-                      placeholder="Additional notes or description"
-                      value={customItem.description}
-                      onChange={(e) => setCustomItem({ ...customItem, description: e.target.value })}
-                      className="min-h-[60px] resize-none"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <SheetFooter className="pt-4 border-t border-border flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAddItemDrawerOpen(false)
-                setShowCustomForm(false)
-                setCatalogSearchQuery("")
-                setSelectedCatalogItems(new Set())
-                setCustomItem({ name: "", category: "", unitCost: "", sku: "", vendor: "", description: "" })
-              }}
-              className="flex-1"
-            >
-              Cancel
-            </Button>
-            {showCustomForm ? (
-              <Button
-                onClick={handleAddCustomItem}
-                disabled={!customItem.name || !customItem.category || !customItem.unitCost}
-                className="flex-1"
-              >
-                <Plus className="h-4 w-4 mr-1.5" />
-                Add Custom Item
-              </Button>
-            ) : (
-              <Button
-                onClick={handleAddSelectedItems}
-                disabled={selectedCatalogItems.size === 0}
-                className="flex-1"
-              >
-                <Plus className="h-4 w-4 mr-1.5" />
-                Add Selected ({selectedCatalogItems.size})
-              </Button>
-            )}
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      <BomDrawer
+        open={addItemDrawerOpen}
+        onClose={() => setAddItemDrawerOpen(false)}
+        onAddItems={(items) => {
+          const newItems = items.map((item) => ({
+            ...item,
+            id: Date.now() + Math.random(),
+          }))
+          setBomItems((prev) => [...prev, ...newItems])
+          setAddItemDrawerOpen(false)
+        }}
+        existingItemIds={bomItems.filter((i) => i.catalogId).map((i) => i.catalogId!)}
+      />
     </AppShell>
   )
 }

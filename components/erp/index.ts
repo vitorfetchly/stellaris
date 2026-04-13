@@ -24,3 +24,5 @@ export {
 export { EntityHeader } from "./entity-header"
 export type { LifecycleStage, LifecycleState, EntityHeaderProps } from "./entity-header"
 export { LifecycleIndicator } from "./lifecycle-indicator"
+export { BomDrawer } from "./bom-drawer"
+export type { BomItem, CatalogItem } from "./bom-drawer"
