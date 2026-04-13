@@ -291,14 +291,14 @@ const lifecycleStages: { key: LifecycleStage; label: string }[] = [
   { key: "project", label: "Project" },
 ]
 
-// Kanban status columns
-const kanbanColumns: { status: OpportunityStatus; label: string }[] = [
-  { status: "created", label: "Created" },
-  { status: "evaluated", label: "Evaluated" },
-  { status: "assigned", label: "Assigned" },
-  { status: "in-proposal", label: "Proposal" },
-  { status: "won", label: "Won" },
-  { status: "lost", label: "Lost" },
+// Kanban status columns with color accents
+const kanbanColumns: { status: OpportunityStatus; label: string; colorClass: string }[] = [
+  { status: "created", label: "Created", colorClass: "border-t-muted-foreground/50" },
+  { status: "evaluated", label: "Evaluated", colorClass: "border-t-info" },
+  { status: "assigned", label: "Assigned", colorClass: "border-t-primary" },
+  { status: "in-proposal", label: "Proposal", colorClass: "border-t-warning" },
+  { status: "won", label: "Won", colorClass: "border-t-success" },
+  { status: "lost", label: "Lost", colorClass: "border-t-destructive" },
 ]
 
 // Lifecycle Dots Component with tooltip
@@ -510,7 +510,10 @@ function KanbanView({
                 }).format(columnValue)}
               </span>
             </div>
-            <div className="space-y-2 min-h-[400px] p-2 rounded-lg bg-muted/30 border border-border/50">
+            <div className={cn(
+              "space-y-2 min-h-[400px] p-2 rounded-lg bg-muted/30 border border-border/50 border-t-2",
+              column.colorClass
+            )}>
               {columnOpportunities.length === 0 ? (
                 <div className="flex items-center justify-center h-20 text-xs text-muted-foreground">
                   No opportunities
@@ -596,22 +599,18 @@ export default function OpportunitiesPage() {
       header: "Opportunity",
       sortable: true,
       render: (row) => (
-        <Link
-          href={`/opportunities/${row.entityId}`}
-          onClick={(e) => e.stopPropagation()}
-          className="font-medium text-foreground hover:text-primary hover:underline underline-offset-2 transition-colors truncate block"
-        >
-          {row.name}
-        </Link>
-      ),
-    },
-    {
-      key: "scope",
-      header: "Scope",
-      width: "200px",
-      sortable: false,
-      render: (row) => (
-        <span className="text-xs text-muted-foreground truncate block">{row.scope}</span>
+        <div className="min-w-0">
+          <Link
+            href={`/opportunities/${row.entityId}`}
+            onClick={(e) => e.stopPropagation()}
+            className="font-medium text-foreground hover:text-primary hover:underline underline-offset-2 transition-colors truncate block"
+          >
+            {row.name}
+          </Link>
+          <span className="text-xs text-muted-foreground truncate block">
+            {requestTypeLabels[row.requestType]}
+          </span>
+        </div>
       ),
     },
     {
@@ -641,17 +640,7 @@ export default function OpportunitiesPage() {
         />
       ),
     },
-    {
-      key: "requestType",
-      header: "Type",
-      width: "140px",
-      sortable: true,
-      render: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {requestTypeLabels[row.requestType]}
-        </span>
-      ),
-    },
+
     {
       key: "estimatedValue",
       header: "Est. Value",
