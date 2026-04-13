@@ -1,18 +1,20 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { 
   Plus, 
-  Eye, 
-  Edit, 
   Trash2, 
-  ExternalLink, 
   UserPlus, 
   AlertCircle,
   Clock,
   Target,
   FileText,
+  Kanban,
+  List,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react"
 import {
   AppShell,
@@ -25,17 +27,37 @@ import {
   StatusType,
   SummaryCard,
   SummaryCardGrid,
-  LifecycleIndicator,
   LifecycleStage,
 } from "@/components/erp"
 import { useNavigationStore } from "@/lib/stores/navigation-store"
 import { formatShortDate } from "@/lib/date-utils"
+import { cn } from "@/lib/utils"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
+import { Button } from "@/components/ui/button"
 
 // Opportunity status type
 type OpportunityStatus = "created" | "evaluated" | "assigned" | "in-proposal" | "won" | "lost"
 
-// Request type categories
-type RequestType = "new-install" | "upgrade" | "maintenance" | "consultation" | "emergency"
+// Request type categories - updated values
+type RequestType = "ground-up-build" | "full-renovation" | "alterations-extension" | "modernization" | "other"
 
 interface Opportunity {
   id: string
@@ -55,12 +77,21 @@ interface Opportunity {
 }
 
 const requestTypeLabels: Record<RequestType, string> = {
-  "new-install": "New Installation",
-  "upgrade": "Upgrade",
-  "maintenance": "Maintenance",
-  "consultation": "Consultation",
-  "emergency": "Emergency",
+  "ground-up-build": "Ground-Up Build",
+  "full-renovation": "Full Renovation",
+  "alterations-extension": "Alterations / Extension",
+  "modernization": "Modernization",
+  "other": "Other",
 }
+
+// Available owners for inline assignment
+const availableOwners = [
+  { id: "john-smith", name: "John Smith" },
+  { id: "mary-johnson", name: "Mary Johnson" },
+  { id: "charles-wilson", name: "Charles Wilson" },
+  { id: "anna-lee", name: "Anna Lee" },
+  { id: "peter-brown", name: "Peter Brown" },
+]
 
 const mockOpportunities: Opportunity[] = [
   {
@@ -72,7 +103,7 @@ const mockOpportunities: Opportunity[] = [
     status: "assigned",
     lifecycleStage: "opportunity",
     owner: "John Smith",
-    requestType: "new-install",
+    requestType: "ground-up-build",
     createdDate: "2026-03-15",
     lastUpdated: "2026-03-28",
     estimatedValue: 285000,
@@ -88,7 +119,7 @@ const mockOpportunities: Opportunity[] = [
     status: "in-proposal",
     lifecycleStage: "proposal",
     owner: "Mary Johnson",
-    requestType: "upgrade",
+    requestType: "modernization",
     createdDate: "2026-03-10",
     lastUpdated: "2026-03-27",
     estimatedValue: 156000,
@@ -104,7 +135,7 @@ const mockOpportunities: Opportunity[] = [
     status: "evaluated",
     lifecycleStage: "opportunity",
     owner: null,
-    requestType: "new-install",
+    requestType: "ground-up-build",
     createdDate: "2026-03-05",
     lastUpdated: "2026-03-08",
     estimatedValue: 420000,
@@ -120,7 +151,7 @@ const mockOpportunities: Opportunity[] = [
     status: "created",
     lifecycleStage: "request",
     owner: null,
-    requestType: "emergency",
+    requestType: "other",
     createdDate: "2026-03-28",
     lastUpdated: "2026-03-28",
     estimatedValue: 45000,
@@ -136,7 +167,7 @@ const mockOpportunities: Opportunity[] = [
     status: "won",
     lifecycleStage: "won",
     owner: "Charles Wilson",
-    requestType: "new-install",
+    requestType: "alterations-extension",
     createdDate: "2026-02-20",
     lastUpdated: "2026-03-25",
     estimatedValue: 380000,
@@ -152,7 +183,7 @@ const mockOpportunities: Opportunity[] = [
     status: "assigned",
     lifecycleStage: "opportunity",
     owner: "Anna Lee",
-    requestType: "new-install",
+    requestType: "ground-up-build",
     createdDate: "2026-02-15",
     lastUpdated: "2026-02-28",
     estimatedValue: 195000,
@@ -168,7 +199,7 @@ const mockOpportunities: Opportunity[] = [
     status: "evaluated",
     lifecycleStage: "opportunity",
     owner: "Peter Brown",
-    requestType: "consultation",
+    requestType: "other",
     createdDate: "2026-02-10",
     lastUpdated: "2026-03-20",
     estimatedValue: 35000,
@@ -184,7 +215,7 @@ const mockOpportunities: Opportunity[] = [
     status: "lost",
     lifecycleStage: "opportunity",
     owner: "John Smith",
-    requestType: "maintenance",
+    requestType: "modernization",
     createdDate: "2026-01-25",
     lastUpdated: "2026-03-15",
     estimatedValue: 72000,
@@ -200,7 +231,7 @@ const mockOpportunities: Opportunity[] = [
     status: "in-proposal",
     lifecycleStage: "proposal",
     owner: "Mary Johnson",
-    requestType: "new-install",
+    requestType: "full-renovation",
     createdDate: "2026-01-18",
     lastUpdated: "2026-03-26",
     estimatedValue: 520000,
@@ -216,7 +247,7 @@ const mockOpportunities: Opportunity[] = [
     status: "created",
     lifecycleStage: "request",
     owner: null,
-    requestType: "upgrade",
+    requestType: "modernization",
     createdDate: "2026-03-27",
     lastUpdated: "2026-03-27",
     estimatedValue: 88000,
@@ -244,28 +275,274 @@ const ownerFilters = [
 ]
 
 const requestTypeFilters = [
-  { value: "new-install", label: "New Installation" },
-  { value: "upgrade", label: "Upgrade" },
-  { value: "maintenance", label: "Maintenance" },
-  { value: "consultation", label: "Consultation" },
-  { value: "emergency", label: "Emergency" },
+  { value: "ground-up-build", label: "Ground-Up Build" },
+  { value: "full-renovation", label: "Full Renovation" },
+  { value: "alterations-extension", label: "Alterations / Extension" },
+  { value: "modernization", label: "Modernization" },
+  { value: "other", label: "Other" },
 ]
 
-const customerFilters = [
-  { value: "techcorp", label: "TechCorp Industries" },
-  { value: "megamart", label: "MegaMart Stores" },
-  { value: "cloudnet", label: "CloudNet Solutions" },
-  { value: "metro-hospital", label: "Metro General Hospital" },
-  { value: "state-university", label: "State University" },
+// Lifecycle stages for dots indicator
+const lifecycleStages: { key: LifecycleStage; label: string }[] = [
+  { key: "request", label: "Request" },
+  { key: "opportunity", label: "Opportunity" },
+  { key: "proposal", label: "Proposal" },
+  { key: "won", label: "Booked" },
+  { key: "project", label: "Project" },
 ]
+
+// Kanban status columns with color accents
+const kanbanColumns: { status: OpportunityStatus; label: string; colorClass: string }[] = [
+  { status: "created", label: "Created", colorClass: "border-t-muted-foreground/50" },
+  { status: "evaluated", label: "Evaluated", colorClass: "border-t-info" },
+  { status: "assigned", label: "Assigned", colorClass: "border-t-primary" },
+  { status: "in-proposal", label: "Proposal", colorClass: "border-t-warning" },
+  { status: "won", label: "Won", colorClass: "border-t-success" },
+  { status: "lost", label: "Lost", colorClass: "border-t-destructive" },
+]
+
+// Lifecycle Dots Component with tooltip
+function LifecycleDots({ currentStage }: { currentStage: LifecycleStage }) {
+  const stageOrder: LifecycleStage[] = ["request", "opportunity", "proposal", "won", "project"]
+  const currentIndex = stageOrder.indexOf(currentStage)
+  const currentLabel = lifecycleStages.find(s => s.key === currentStage)?.label || currentStage
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center gap-1 cursor-help">
+            {stageOrder.slice(0, 4).map((stage, index) => {
+              const isCompleted = index < currentIndex
+              const isCurrent = index === currentIndex
+              return (
+                <span
+                  key={stage}
+                  className={cn(
+                    "h-2 w-2 rounded-full transition-colors",
+                    isCompleted && "bg-success",
+                    isCurrent && "bg-primary",
+                    !isCompleted && !isCurrent && "bg-muted-foreground/30"
+                  )}
+                />
+              )
+            })}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          <p>{currentLabel}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+// Inline Owner Selector Component
+function InlineOwnerSelector({ 
+  currentOwner, 
+  onSelect,
+  isUnassigned 
+}: { 
+  currentOwner: string | null
+  onSelect: (owner: string | null) => void
+  isUnassigned: boolean
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "flex items-center gap-1 text-sm hover:bg-accent rounded px-1.5 py-0.5 -mx-1.5 transition-colors text-left",
+            isUnassigned && "text-warning"
+          )}
+        >
+          {isUnassigned ? (
+            <span className="flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              Unassigned
+            </span>
+          ) : (
+            <span className="truncate max-w-[100px]">{currentOwner}</span>
+          )}
+          <ChevronsUpDown className="h-3 w-3 text-muted-foreground shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[200px] p-0" align="start" onClick={(e) => e.stopPropagation()}>
+        <Command>
+          <CommandInput placeholder="Search owner..." className="h-8" />
+          <CommandList>
+            <CommandEmpty>No owner found.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="unassigned"
+                onSelect={() => {
+                  onSelect(null)
+                  setOpen(false)
+                }}
+                className="text-xs"
+              >
+                <Check
+                  className={cn(
+                    "mr-2 h-3 w-3",
+                    currentOwner === null ? "opacity-100" : "opacity-0"
+                  )}
+                />
+                Unassigned
+              </CommandItem>
+              {availableOwners.map((owner) => (
+                <CommandItem
+                  key={owner.id}
+                  value={owner.name}
+                  onSelect={() => {
+                    onSelect(owner.name)
+                    setOpen(false)
+                  }}
+                  className="text-xs"
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-3 w-3",
+                      currentOwner === owner.name ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {owner.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+// Kanban Card Component
+function KanbanCard({ 
+  opportunity, 
+  onClick 
+}: { 
+  opportunity: Opportunity
+  onClick: () => void 
+}) {
+  return (
+    <div
+      onClick={onClick}
+      className="group p-3 rounded-lg border border-border bg-card hover:bg-accent/50 hover:border-primary/50 transition-colors cursor-pointer"
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-[10px] text-muted-foreground">
+            {opportunity.entityId}
+          </p>
+          <p className="font-medium text-sm text-foreground truncate group-hover:text-primary transition-colors">
+            {opportunity.name}
+          </p>
+        </div>
+      </div>
+      
+      <p className="text-xs text-muted-foreground truncate mb-2">
+        {opportunity.customer}
+      </p>
+
+      <div className="flex items-center justify-between pt-2 border-t border-border">
+        <LifecycleDots currentStage={opportunity.lifecycleStage} />
+        <span className="font-medium text-xs">
+          {new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+            maximumFractionDigits: 0,
+          }).format(opportunity.estimatedValue)}
+        </span>
+      </div>
+
+      {(opportunity.isUnassigned || opportunity.isStale) && (
+        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border">
+          {opportunity.isUnassigned && (
+            <span className="flex items-center gap-1 text-[10px] text-warning">
+              <AlertCircle className="h-3 w-3" />
+              Unassigned
+            </span>
+          )}
+          {opportunity.isStale && (
+            <span className="flex items-center gap-1 text-[10px] text-warning">
+              <Clock className="h-3 w-3" />
+              Stale
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Kanban View Component
+function KanbanView({ 
+  opportunities, 
+  onCardClick 
+}: { 
+  opportunities: Opportunity[]
+  onCardClick: (opp: Opportunity) => void 
+}) {
+  return (
+    <div className="flex gap-4 p-4 overflow-x-auto min-h-[500px]">
+      {kanbanColumns.map((column) => {
+        const columnOpportunities = opportunities.filter(opp => opp.status === column.status)
+        const columnValue = columnOpportunities.reduce((sum, opp) => sum + opp.estimatedValue, 0)
+        
+        return (
+          <div key={column.status} className="flex-shrink-0 w-[280px]">
+            <div className="flex items-center justify-between mb-3 px-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-medium text-foreground">{column.label}</h3>
+                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  {columnOpportunities.length}
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {new Intl.NumberFormat("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                  notation: "compact",
+                  maximumFractionDigits: 0,
+                }).format(columnValue)}
+              </span>
+            </div>
+            <div className={cn(
+              "space-y-2 min-h-[400px] p-2 rounded-lg bg-muted/30 border border-border/50 border-t-2",
+              column.colorClass
+            )}>
+              {columnOpportunities.length === 0 ? (
+                <div className="flex items-center justify-center h-20 text-xs text-muted-foreground">
+                  No opportunities
+                </div>
+              ) : (
+                columnOpportunities.map((opp) => (
+                  <KanbanCard 
+                    key={opp.id} 
+                    opportunity={opp} 
+                    onClick={() => onCardClick(opp)} 
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 export default function OpportunitiesPage() {
   const router = useRouter()
   const setActiveModule = useNavigationStore((state) => state.setActiveModule)
   const [searchValue, setSearchValue] = useState("")
   const [filterValues, setFilterValues] = useState<Record<string, string>>({})
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table")
+  const [viewMode, setViewMode] = useState<"table" | "kanban">("table")
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
+  const [opportunities, setOpportunities] = useState<Opportunity[]>(mockOpportunities)
 
   useEffect(() => {
     setActiveModule("opportunities")
@@ -275,101 +552,99 @@ export default function OpportunitiesPage() {
     router.push(`/opportunities/${opportunity.entityId}`)
   }
 
+  const handleOwnerChange = (opportunityId: string, newOwner: string | null) => {
+    setOpportunities(prev => prev.map(opp => {
+      if (opp.id === opportunityId) {
+        return {
+          ...opp,
+          owner: newOwner,
+          isUnassigned: newOwner === null,
+        }
+      }
+      return opp
+    }))
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedRows.size === 0) return
+    // In production, this would call an API
+    setOpportunities(prev => prev.filter(opp => !selectedRows.has(opp.id)))
+    setSelectedRows(new Set())
+  }
+
+  // Columns in new order: Entity ID, Customer, Opportunity, Scope, Status, Lifecycle, Owner, Type, Estimated Value, Last Updated
   const columns: Column<Opportunity>[] = [
     {
       key: "entityId",
       header: "Entity ID",
-      width: "130px",
+      width: "120px",
       sortable: true,
       render: (row) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            navigateToOpportunity(row)
-          }}
-          className="font-mono text-xs font-semibold text-primary hover:underline underline-offset-2 transition-colors"
-        >
+        <span className="font-mono text-xs text-muted-foreground">
           {row.entityId}
-        </button>
-      ),
-    },
-    {
-      key: "name",
-      header: "Opportunity / Scope",
-      sortable: true,
-      render: (row) => (
-        <div className="min-w-0">
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              navigateToOpportunity(row)
-            }}
-            className="font-medium text-foreground truncate hover:text-primary hover:underline underline-offset-2 transition-colors text-left block"
-          >
-            {row.name}
-          </button>
-          <p className="text-xs text-muted-foreground truncate">{row.scope}</p>
-        </div>
+        </span>
       ),
     },
     {
       key: "customer",
       header: "Customer",
-      width: "160px",
+      width: "150px",
       sortable: true,
       render: (row) => (
-        <span className="text-sm text-foreground">{row.customer}</span>
+        <span className="text-sm text-foreground truncate">{row.customer}</span>
+      ),
+    },
+    {
+      key: "name",
+      header: "Opportunity",
+      sortable: true,
+      render: (row) => (
+        <div className="min-w-0">
+          <Link
+            href={`/opportunities/${row.entityId}`}
+            onClick={(e) => e.stopPropagation()}
+            className="font-medium text-foreground hover:text-primary hover:underline underline-offset-2 transition-colors truncate block"
+          >
+            {row.name}
+          </Link>
+          <span className="text-xs text-muted-foreground truncate block">
+            {requestTypeLabels[row.requestType]}
+          </span>
+        </div>
       ),
     },
     {
       key: "status",
       header: "Status",
-      width: "110px",
+      width: "100px",
       sortable: true,
       render: (row) => <StatusBadge status={row.status as StatusType} />,
     },
     {
       key: "lifecycleStage",
       header: "Lifecycle",
-      width: "140px",
+      width: "80px",
       sortable: true,
-      render: (row) => (
-        <LifecycleIndicator currentStage={row.lifecycleStage} />
-      ),
+      render: (row) => <LifecycleDots currentStage={row.lifecycleStage} />,
     },
     {
       key: "owner",
       header: "Owner",
-      width: "130px",
+      width: "140px",
       sortable: true,
       render: (row) => (
-        <div className="flex items-center gap-1.5">
-          {row.isUnassigned ? (
-            <span className="flex items-center gap-1 text-xs text-warning">
-              <AlertCircle className="h-3 w-3" />
-              Unassigned
-            </span>
-          ) : (
-            <span className="text-sm text-foreground">{row.owner}</span>
-          )}
-        </div>
+        <InlineOwnerSelector
+          currentOwner={row.owner}
+          isUnassigned={row.isUnassigned}
+          onSelect={(newOwner) => handleOwnerChange(row.id, newOwner)}
+        />
       ),
     },
-    {
-      key: "requestType",
-      header: "Type",
-      width: "120px",
-      sortable: true,
-      render: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {requestTypeLabels[row.requestType]}
-        </span>
-      ),
-    },
+
     {
       key: "estimatedValue",
       header: "Est. Value",
-      width: "110px",
+      width: "100px",
       sortable: true,
       className: "text-right",
       render: (row) => (
@@ -385,7 +660,7 @@ export default function OpportunitiesPage() {
     {
       key: "lastUpdated",
       header: "Updated",
-      width: "100px",
+      width: "90px",
       sortable: true,
       render: (row) => (
         <div className="flex items-center gap-1">
@@ -400,16 +675,12 @@ export default function OpportunitiesPage() {
     },
   ]
 
+  // Updated row actions - removed View Details and Edit (clicking name handles navigation)
   const rowActions: RowAction<Opportunity>[] = [
     {
-      label: "View Details",
-      icon: <Eye className="h-4 w-4" />,
-      onClick: (row) => navigateToOpportunity(row),
-    },
-    {
-      label: "Edit",
-      icon: <Edit className="h-4 w-4" />,
-      onClick: (row) => router.push(`/opportunities/${row.entityId}/edit`),
+      label: "Create Proposal",
+      icon: <FileText className="h-4 w-4" />,
+      onClick: (row) => router.push(`/proposals/create?opportunityId=${row.entityId}`),
     },
     {
       label: "Assign Owner",
@@ -417,26 +688,18 @@ export default function OpportunitiesPage() {
       onClick: (row) => console.log("Assign owner", row.entityId),
     },
     {
-      label: "Create Proposal",
-      icon: <FileText className="h-4 w-4" />,
-      onClick: (row) => console.log("Create proposal", row.entityId),
-    },
-    {
-      label: "Open in new tab",
-      icon: <ExternalLink className="h-4 w-4" />,
-      onClick: (row) => window.open(`/opportunities/${row.entityId}`, "_blank"),
-    },
-    {
       label: "Delete",
       icon: <Trash2 className="h-4 w-4" />,
-      onClick: (row) => console.log("Delete", row.entityId),
+      onClick: (row) => {
+        setOpportunities(prev => prev.filter(opp => opp.id !== row.id))
+      },
       variant: "destructive",
       separator: true,
     },
   ]
 
   // Filter logic
-  const filteredOpportunities = mockOpportunities.filter((opp) => {
+  const filteredOpportunities = opportunities.filter((opp) => {
     const matchesSearch =
       !searchValue ||
       opp.entityId.toLowerCase().includes(searchValue.toLowerCase()) ||
@@ -464,13 +727,13 @@ export default function OpportunitiesPage() {
   })
 
   // Summary stats
-  const totalOpportunities = mockOpportunities.length
-  const activeOpportunities = mockOpportunities.filter(
+  const totalOpportunities = opportunities.length
+  const activeOpportunities = opportunities.filter(
     (o) => !["won", "lost"].includes(o.status)
   ).length
-  const unassignedCount = mockOpportunities.filter((o) => o.isUnassigned).length
-  const staleCount = mockOpportunities.filter((o) => o.isStale).length
-  const pipelineValue = mockOpportunities
+  const unassignedCount = opportunities.filter((o) => o.isUnassigned).length
+  const staleCount = opportunities.filter((o) => o.isStale).length
+  const pipelineValue = opportunities
     .filter((o) => !["won", "lost"].includes(o.status))
     .reduce((sum, o) => sum + o.estimatedValue, 0)
 
@@ -522,29 +785,71 @@ export default function OpportunitiesPage() {
         </SummaryCardGrid>
 
         <div className="rounded-lg border border-border bg-card">
-          <FilterBar
-            searchPlaceholder="Search by Entity ID, name, customer..."
-            searchValue={searchValue}
-            onSearchChange={setSearchValue}
-            filters={[
-              { key: "status", label: "Status", options: statusFilters },
-              { key: "owner", label: "Owner", options: ownerFilters },
-              { key: "requestType", label: "Request Type", options: requestTypeFilters },
-            ]}
-            filterValues={filterValues}
-            onFilterChange={(key, value) =>
-              setFilterValues((prev) => ({ ...prev, [key]: value }))
-            }
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            actions={
-              selectedRows.size > 0 && (
-                <span className="text-xs text-muted-foreground">
-                  {selectedRows.size} selected
-                </span>
-              )
-            }
-          />
+          <div className="flex items-center gap-2 px-3">
+            <div className="flex-1">
+              <FilterBar
+                searchPlaceholder="Search by Entity ID, name, customer..."
+                searchValue={searchValue}
+                onSearchChange={setSearchValue}
+                filters={[
+                  { key: "status", label: "Status", options: statusFilters },
+                  { key: "owner", label: "Owner", options: ownerFilters },
+                  { key: "requestType", label: "Type", options: requestTypeFilters },
+                ]}
+                filterValues={filterValues}
+                onFilterChange={(key, value) =>
+                  setFilterValues((prev) => ({ ...prev, [key]: value }))
+                }
+                showViewToggle={false}
+                actions={
+                  selectedRows.size > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {selectedRows.size} selected
+                      </span>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={handleBulkDelete}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Delete
+                      </Button>
+                    </div>
+                  )
+                }
+              />
+            </div>
+            
+            {/* Custom view toggle for Table/Kanban */}
+            <div className="flex items-center rounded-md border border-border bg-secondary">
+              <button
+                onClick={() => setViewMode("table")}
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-l transition-colors",
+                  viewMode === "table"
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Table view"
+              >
+                <List className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode("kanban")}
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-r transition-colors",
+                  viewMode === "kanban"
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Kanban view"
+              >
+                <Kanban className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
 
           {viewMode === "table" ? (
             <DataTable
@@ -559,64 +864,10 @@ export default function OpportunitiesPage() {
               className="border-0 rounded-none"
             />
           ) : (
-            <div className="grid grid-cols-3 gap-4 p-4">
-              {filteredOpportunities.map((opp) => (
-                <div
-                  key={opp.id}
-                  onClick={() => navigateToOpportunity(opp)}
-                  className="group p-4 rounded-lg border border-border bg-card hover:bg-accent/50 hover:border-primary/50 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-mono text-xs font-semibold text-primary">
-                        {opp.entityId}
-                      </p>
-                      <p className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                        {opp.name}
-                      </p>
-                    </div>
-                    <StatusBadge status={opp.status as StatusType} />
-                  </div>
-                  
-                  <p className="text-xs text-muted-foreground truncate mb-2">
-                    {opp.scope}
-                  </p>
-                  
-                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-                    <span>{opp.customer}</span>
-                    <span>{requestTypeLabels[opp.requestType]}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-border">
-                    <LifecycleIndicator currentStage={opp.lifecycleStage} />
-                    <span className="font-medium text-sm">
-                      {new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: "USD",
-                        maximumFractionDigits: 0,
-                      }).format(opp.estimatedValue)}
-                    </span>
-                  </div>
-
-                  {(opp.isUnassigned || opp.isStale) && (
-                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border">
-                      {opp.isUnassigned && (
-                        <span className="flex items-center gap-1 text-[10px] text-warning">
-                          <AlertCircle className="h-3 w-3" />
-                          Unassigned
-                        </span>
-                      )}
-                      {opp.isStale && (
-                        <span className="flex items-center gap-1 text-[10px] text-warning">
-                          <Clock className="h-3 w-3" />
-                          Stale
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <KanbanView 
+              opportunities={filteredOpportunities} 
+              onCardClick={navigateToOpportunity} 
+            />
           )}
         </div>
       </div>
